@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sana AI - Voice Assistant with 3D Avatar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+
+        .model-panel {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .model-selector {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .model-btn {
+            flex: 1;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+
+        .model-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: #fff;
+        }
+
+        .model-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .chat-panel {
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .status.speaking {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            background: #f5f5f5;
+            padding: 15px;
+            max-height: 400px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message-content {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .user .message-content {
+            background: #667eea;
+            color: white;
+        }
+
+        .ai .message-content {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-send {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-send:hover {
+            background: #5568d3;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-send:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-listen {
+            background: #ff6b6b;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-listen:hover {
+            background: #ff5252;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .btn-listen.recording {
+            animation: pulse 1s infinite;
+            background: #ff4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(255, 68, 68, 0); }
+        }
+
+        .emotion-selector {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .emotion-btn {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .emotion-btn:hover {
+            border-color: #667eea;
+        }
+
+        .emotion-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .model-panel {
+                min-height: 300px;
+            }
+        }
+
+        .emotion-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 3D Model Panel -->
+        <div class="model-panel">
+            <div class="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+            <div class="model-selector">
+                <button class="model-btn active" data-model="1">Sana</button>
+                <button class="model-btn" data-model="3">Model 3</button>
+            </div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="chat-panel">
+            <div class="header">
+                <h1>🎭 Sana AI</h1>
+                <div class="status" id="status">Ready</div>
+            </div>
+
+            <div class="emotion-label">Emotion:</div>
+            <div class="emotion-selector">
+                <button class="emotion-btn active" data-emotion="neutral">Neutral</button>
+                <button class="emotion-btn" data-emotion="excited">Excited</button>
+                <button class="emotion-btn" data-emotion="calm">Calm</button>
+                <button class="emotion-btn" data-emotion="dramatic">Dramatic</button>
+            </div>
+
+            <div class="messages-container" id="messages">
+                <div class="message ai">
+                    <div class="message-content">Hello senpai! 👋 I'm Sana, your AI assistant. How can I help you today?</div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="Type your message or use the microphone..."
+                    autocomplete="off"
+                >
+                <button class="btn btn-send" id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+
+            <div class="controls">
+                <button class="btn btn-listen" id="listenBtn" onclick="toggleListening()">🎤 Listen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js and VRM libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three-vrm@0.6.12/lib/three-vrm.js"></script>
+    
+    <script>
+        let scene, camera, renderer, currentModel;
+        let eyeBlinkTime = 0;
+        let isSpeaking = false;
+        let selectedEmotion = 'neutral';
+        let isListening = false;
+
+        // Initialize Three.js scene
+        function initScene() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(
+                75,
+                document.getElementById('canvas').clientWidth / document.getElementById('canvas').clientHeight,
+                0.1,
+                1000
+            );
+            camera.position.z = 1.5;
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+            renderer.setSize(
+                document.getElementById('canvas').clientWidth,
+                document.getElementById('canvas').clientHeight
+            );
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Lighting
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 2, 1);
+            scene.add(light);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            // Load initial model
+            loadModel(1);
+
+            // Animation loop
+            animate();
+        }
+
+        // Load VRM model
+        async function loadModel(modelId) {
+            // Remove old model
+            if (currentModel) {
+                scene.remove(currentModel);
+            }
+
+            const modelPath = `/static/models/model_${modelId}.vrm`;
+            
+            try {
+                updateStatus('Loading model...');
+                
+                const response = await fetch(modelPath);
+                const arrayBuffer = await response.arrayBuffer();
+                
+                const vrm = await THREE.VRMLoaderPlugin.parse(arrayBuffer);
+                currentModel = vrm.scene;
+                
+                // Adjust model
+                currentModel.scale.set(1, 1, 1);
+                currentModel.position.y = -0.5;
+                
+                scene.add(currentModel);
+                updateStatus('Model loaded!');
+            } catch (error) {
+                console.error('Error loading model:', error);
+                updateStatus('Error loading model');
+            }
+        }
+
+        // Eye blink animation
+        function updateEyeBlink() {
+            if (!currentModel) return;
+
+            eyeBlinkTime += 0.016; // ~60fps
+
+            // Random blink every 3-5 seconds
+            if (eyeBlinkTime > Math.random() * 2 + 3) {
+                eyeBlinkTime = 0;
+                triggerBlink();
+            }
+        }
+
+        function triggerBlink() {
+            if (!currentModel || !currentModel.userData.vrm) return;
+
+            const vrm = currentModel.userData.vrm;
+            // VRM blendshapes for eyes
+            // This would need to be customized based on your VRM model's bone names
+            if (vrm.expressionManager) {
+                vrm.expressionManager.setValue('Blink', 1);
+                setTimeout(() => {
+                    if (vrm.expressionManager) {
+                        vrm.expressionManager.setValue('Blink', 0);
+                    }
+                }, 100);
+            }
+        }
+
+        // Lip sync animation
+        function updateLipSync(audioContext) {
+            if (!currentModel || !currentModel.userData.vrm) return;
+
+            const vrm = currentModel.userData.vrm;
+            
+            // Simple lip sync based on audio frequency
+            if (isSpeaking && audioContext) {
+                const analyser = audioContext.createAnalyser();
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+
+                const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                const mouthOpen = Math.min(average / 255, 1);
+
+                if (vrm.expressionManager) {
+                    vrm.expressionManager.setValue('A', mouthOpen);
+                }
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (currentModel) {
+                currentModel.rotation.y += 0.003; // Slow rotation
+                
+                // Update animations
+                updateEyeBlink();
+                updateLipSync();
+
+                if (currentModel.userData.vrm && currentModel.userData.vrm.update) {
+                    currentModel.userData.vrm.update(0.016);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Message handling
+        function addMessage(text, sender) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.innerHTML = `<div class="message-content">${text}</div>`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            addMessage(text, 'user');
+            input.value = '';
+
+            updateStatus('Thinking...');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+
+                const data = await response.json();
+                if (data.response) {
+                    addMessage(data.response, 'ai');
+                    
+                    // Speak the response
+                    isSpeaking = true;
+                    updateStatus('Speaking...');
+                    
+                    await fetch('/api/speak', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            text: data.response,
+                            emotion: selectedEmotion 
+                        })
+                    });
+
+                    isSpeaking = false;
+                    updateStatus('Ready');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Error occurred!', 'ai');
+                updateStatus('Error!');
+            }
+        }
+
+        function updateStatus(text) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            if (text !== 'Ready') {
+                status.classList.add('speaking');
+            } else {
+                status.classList.remove('speaking');
+            }
+        }
+
+        // Emotion selector
+        document.querySelectorAll('.emotion-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.emotion-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                selectedEmotion = e.target.dataset.emotion;
+            });
+        });
+
+        // Model selector
+        document.querySelectorAll('.model-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                const modelId = e.target.dataset.model;
+                loadModel(modelId);
+            });
+        });
+
+        // Listen button
+        function toggleListening() {
+            const btn = document.getElementById('listenBtn');
+            isListening = !isListening;
+            btn.classList.toggle('recording');
+            btn.textContent = isListening ? '🛑 Stop Listening' : '🎤 Listen';
+        }
+
+        // Enter key to send
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Initialize on load
+        window.addEventListener('load', initScene);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const canvas = document.getElementById('canvas');
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+    </script>
+</body>
+</html>
