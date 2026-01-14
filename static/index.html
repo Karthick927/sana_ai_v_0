@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sana Voice AI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+      background: #1a1a2e;
+      color: white;
+      min-height: 100vh;
+      margin: 0;
+    }
+    h2 { color: #ff6b9d; }
+    #status {
+      font-size: 18px;
+      margin: 20px 0;
+      padding: 15px 30px;
+      border-radius: 10px;
+      background: #16213e;
+    }
+    button {
+      padding: 20px 40px;
+      font-size: 20px;
+      cursor: pointer;
+      border: none;
+      border-radius: 50px;
+      background: #ff6b9d;
+      color: white;
+      transition: all 0.3s;
+    }
+    button:hover { background: #ff4778; transform: scale(1.05); }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #volume {
+      width: 200px;
+      height: 10px;
+      background: #333;
+      border-radius: 5px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+    #volumeBar {
+      height: 100%;
+      background: #ff6b9d;
+      width: 0%;
+      transition: width 0.1s;
+    }
+    #transcript {
+      margin-top: 30px;
+      padding: 20px;
+      background: #16213e;
+      border-radius: 10px;
+      max-width: 500px;
+      min-height: 100px;
+    }
+    .user { color: #4fc3f7; }
+    .sana { color: #ff6b9d; }
+  </style>
+</head>
+<body>
+  <h2>💀 Sana Voice AI</h2>
+  <div id="status">Click to start talking</div>
+  <button id="btn" onclick="toggleListening()">🎤 Start</button>
+  <div id="volume"><div id="volumeBar"></div></div>
+  <div id="transcript"></div>
+
+<script>
+let mediaRecorder;
+let chunks = [];
+let stream;
+let audioContext;
+let analyser;
+let isListening = false;
+let silenceTimer = null;
+let hasSpoken = false;
+
+const SILENCE_THRESHOLD = 15;      // Volume level considered silence
+const SILENCE_DURATION = 1500;     // ms of silence before stopping
+const MIN_RECORD_TIME = 500;       // Minimum recording time in ms
+
+const statusEl = document.getElementById('status');
+const btnEl = document.getElementById('btn');
+const volumeBar = document.getElementById('volumeBar');
+const transcriptEl = document.getElementById('transcript');
+
+async function toggleListening() {
+  if (isListening) {
+    stopListening();
+  } else {
+    await startListening();
+  }
+}
+
+async function startListening() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Setup audio analysis for silence detection
+    audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    
+    // Setup recorder
+    mediaRecorder = new MediaRecorder(stream);
+    chunks = [];
+    hasSpoken = false;
+    
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    mediaRecorder.onstop = onRecordingStop;
+    
+    mediaRecorder.start();
+    isListening = true;
+    
+    statusEl.textContent = "🎤 Listening... speak now!";
+    btnEl.textContent = "⏹️ Stop";
+    
+    // Start monitoring volume
+    monitorVolume();
+    
+  } catch (err) {
+    console.error("Mic error:", err);
+    statusEl.textContent = "❌ Microphone access denied";
+  }
+}
+
+function monitorVolume() {
+  if (!isListening) return;
+  
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(dataArray);
+  
+  // Calculate average volume
+  const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+  volumeBar.style.width = Math.min(100, average * 2) + '%';
+  
+  if (average > SILENCE_THRESHOLD) {
+    // User is speaking
+    hasSpoken = true;
+    statusEl.textContent = "🎤 Listening...";
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  } else if (hasSpoken && !silenceTimer) {
+    // User stopped speaking, start silence timer
+    statusEl.textContent = "🤫 Detecting silence...";
+    silenceTimer = setTimeout(() => {
+      if (isListening) {
+        stopListening();
+      }
+    }, SILENCE_DURATION);
+  }
+  
+  requestAnimationFrame(monitorVolume);
+}
+
+function stopListening() {
+  if (!isListening) return;
+  
+  isListening = false;
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+  
+  if (audioContext) {
+    audioContext.close();
+  }
+  
+  volumeBar.style.width = '0%';
+  btnEl.textContent = "🎤 Start";
+}
+
+async function onRecordingStop() {
+  if (chunks.length === 0) {
+    statusEl.textContent = "No audio recorded. Try again.";
+    return;
+  }
+  
+  statusEl.textContent = "🔄 Processing your voice...";
+  btnEl.disabled = true;
+  
+  try {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const form = new FormData();
+    form.append("file", blob);
+    
+    // Speech to text
+    statusEl.textContent = "🔄 Understanding what you said...";
+    const stt = await fetch("/stt", { method: "POST", body: form });
+    const sttData = await stt.json();
+    console.log("STT:", sttData);
+    
+    if (!sttData.text || sttData.text.trim() === '') {
+      statusEl.textContent = "Couldn't hear you. Try again!";
+      btnEl.disabled = false;
+      return;
+    }
+    
+    addToTranscript("You", sttData.text, "user");
+    
+    // Get Sana's reply
+    statusEl.textContent = "💭 Sana is thinking...";
+    const chat = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: sttData.text })
+    });
+    const chatData = await chat.json();
+    console.log("Chat:", chatData);
+    
+    addToTranscript("Sana", chatData.reply, "sana");
+    
+    // Text to speech
+    statusEl.textContent = "🗣️ Sana is speaking...";
+    const tts = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: chatData.reply })
+    });
+    
+    if (!tts.ok) {
+      throw new Error("TTS failed");
+    }
+    
+    const audioBlob = await tts.blob();
+    const audio = new Audio(URL.createObjectURL(audioBlob));
+    
+    audio.onended = () => {
+      statusEl.textContent = "Click to talk again";
+      btnEl.disabled = false;
+    };
+    
+    audio.onerror = () => {
+      statusEl.textContent = "Audio playback error";
+      btnEl.disabled = false;
+    };
+    
+    await audio.play();
+    
+  } catch (err) {
+    console.error("Error:", err);
+    statusEl.textContent = "❌ Error: " + err.message;
+    btnEl.disabled = false;
+  }
+}
+
+function addToTranscript(name, text, className) {
+  const p = document.createElement('p');
+  p.innerHTML = `<strong class="${className}">${name}:</strong> ${text}`;
+  transcriptEl.appendChild(p);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+</script>
+</body>
+</html>

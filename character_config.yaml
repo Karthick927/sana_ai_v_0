@@ -1,0 +1,5 @@
+sovits_ping_config:
+  text_lang: "en"
+  ref_audio_path: "D:/voiceai-1/ref.wav"
+  prompt_text: ""
+  prompt_lang: "en"
